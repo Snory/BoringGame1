@@ -3,37 +3,17 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.AI;
 
-[Serializable]
-public struct RobotMovementPattern
-{
-    public Vector3 Direction;
-    public float Speed;
-    public float NextPositionWaitTime;
-    public RobotMovementPattern(Vector3 direction, float speed, float nextPositionWaitTime)
-    {
-        Direction = direction;
-        Speed = speed;
-        NextPositionWaitTime = nextPositionWaitTime;
-    }
-
-    public RobotMovementPattern(Vector3 direction, RobotMovementPattern oldPattern)
-    {
-        Direction = direction;
-        Speed = oldPattern.Speed;
-        NextPositionWaitTime = oldPattern.NextPositionWaitTime;
-    }
-}
-
-public class RobotMovement : MonoBehaviour
+public class RobotPatternMovement : MonoBehaviour
 {
     [SerializeField]
     private NavMeshAgent _navmeshAgent;
 
     [SerializeField]
-    private List<RobotMovementPattern> _robotMovementData;
+    private List<MovementPattern> _robotMovementPatterns;
 
     [SerializeField]
     private Transform _transform;
@@ -42,54 +22,46 @@ public class RobotMovement : MonoBehaviour
     [SerializeField]
     private float _nextAngleIncrement;
 
+    [SerializeField]
+    private bool _debugMovementPattern;
+
 
     private void Start()
     {
         _cancellationTokenSource = new CancellationTokenSource();
         CancellationToken cancellationToken = _cancellationTokenSource.Token;
 
-        try
-        {
-            StartRobotPatternMovement(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError(ex.ToString());
-        }
+        StartRobotPatternMovement(cancellationToken);
     }
-
 
     public async void StartRobotPatternMovement(CancellationToken cancellationToken)
     {
+    
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                Debug.Log("StartRobotPatternMovement - start");
-
-                List<RobotMovementPattern> robotMovementPattern = _robotMovementData;
+                List<MovementPattern> robotMovementPattern = _robotMovementPatterns;
 
                 float angle = 0;
                 bool reachable = false;
 
                 for (int i = 0; i < 360 / _nextAngleIncrement; i++)
                 {
-                    Debug.Log("Searching for movable pattern");
+
+                    Debug.Log("Searching for next angle: " + angle.ToString());
 
                     reachable = RobotMovementPatternReachable(robotMovementPattern);
 
+                    Debug.Log("Reachable: " + reachable.ToString());
+
                     if (reachable)
                     {
-                        Debug.Log("Pattern found");
                         break;
                     }
-
-                    if (angle % 360 == 0)  // jestli je to uhel dìlitelný 360, tak jsme na stejné pozici a nemusim to øešit
-                    {
-                        continue;
-                    }
-
+                                
                     angle += _nextAngleIncrement;
+
                     robotMovementPattern = AdjustRobotMovementPattern(robotMovementPattern, angle);
                 }
 
@@ -97,7 +69,15 @@ public class RobotMovement : MonoBehaviour
                 if (reachable)
                 {
                     await Move(robotMovementPattern, cancellationToken);
+                } else
+                {
+                    //tady to bude chtít nìjakej totálnì random point, ale nejsem si jistý, zda by to mìl èi nemìl být jiný pohyb
                 }
+
+            }
+            catch (TaskCanceledException ex)
+            {
+                Debug.Log(ex.ToString());
             }
             catch
             {
@@ -106,62 +86,51 @@ public class RobotMovement : MonoBehaviour
         }
     }
 
-    public async Task Move(List<RobotMovementPattern> robotMovementPatterns, CancellationToken cancellationToken)
+    public async Task Move(List<MovementPattern> robotMovementPatterns, CancellationToken cancellationToken)
     {
         foreach (var pattern in robotMovementPatterns)
         {
             if (!cancellationToken.IsCancellationRequested)
             {
-                Debug.Log("Move in direction: " + pattern.Direction);
-
-
                 await MoveRoutine(pattern, cancellationToken);
-
             }
         }
     }
 
-    public async Task MoveRoutine(RobotMovementPattern pattern, CancellationToken cancellationToken)
+    public async Task MoveRoutine(MovementPattern pattern, CancellationToken cancellationToken)
     {
         if (!cancellationToken.IsCancellationRequested)
         {
-
             Vector3 newPosition = _transform.position + pattern.Direction;
             _navmeshAgent.speed = pattern.Speed;
             _navmeshAgent.destination = newPosition;
 
             await WaitTillReachDestination(cancellationToken, newPosition); //dojdi na pozici
-
-            Debug.Log("Waiting on position for: " + pattern.NextPositionWaitTime);
             await Task.Delay(System.TimeSpan.FromSeconds(pattern.NextPositionWaitTime), cancellationToken); //poèkej tam jak dlouho uznáš za vhodné
-
         }
     }
 
     public async Task WaitTillReachDestination(CancellationToken cancellationToken, Vector3 position)
     {
-        Debug.Log("Waiting till agent will reach destination");
-        while (_navmeshAgent.velocity.magnitude > 0 && !cancellationToken.IsCancellationRequested)
+        while (Vector3.Distance(_transform.position, position) > 0.1 && !cancellationToken.IsCancellationRequested)
         {
-            Debug.Log("Distance: " + Vector3.Distance(_transform.position, position));
-
             await Task.Yield();
-
         }
     }
 
-    private List<RobotMovementPattern> AdjustRobotMovementPattern(List<RobotMovementPattern> robotMovementPattern, float rotateAngle)
+    private List<MovementPattern> AdjustRobotMovementPattern(List<MovementPattern> robotMovementPattern, float rotateAngle)
     {
-        List<RobotMovementPattern> newRobotMovementPattern = new List<RobotMovementPattern>();
+        List<MovementPattern> newRobotMovementPattern = new List<MovementPattern>();
 
-        foreach (RobotMovementPattern pattern in robotMovementPattern)
+        foreach (MovementPattern pattern in robotMovementPattern)
         {
             Vector3 newPosition = RotateVector(pattern.Direction, rotateAngle);
-            newRobotMovementPattern.Add(new RobotMovementPattern(newPosition, pattern));
+            newRobotMovementPattern.Add(new MovementPattern(newPosition, pattern));
         }
 
         return newRobotMovementPattern;
     }
+
 
     private Vector3 RotateVector(Vector3 vector, float angleRadians)
     {
@@ -180,13 +149,13 @@ public class RobotMovement : MonoBehaviour
         return NavMesh.SamplePosition(position, out _, _navmeshAgent.height, NavMesh.AllAreas);
     }
 
-    private bool RobotMovementPatternReachable(List<RobotMovementPattern> robotMovementPattern)
+    private bool RobotMovementPatternReachable(List<MovementPattern> robotMovementPattern)
     {
         bool reachable = true;
 
         Vector3 currentPosition = _transform.position;
 
-        foreach (RobotMovementPattern pattern in robotMovementPattern)
+        foreach (MovementPattern pattern in robotMovementPattern)
         {
             Vector3 nextPosition = currentPosition + pattern.Direction;
 
@@ -220,7 +189,22 @@ public class RobotMovement : MonoBehaviour
             _cancellationTokenSource.Dispose();
             _cancellationTokenSource = null;
         }
+    }
 
+
+    private void OnDrawGizmos()
+    {
+        if (_debugMovementPattern)
+        {
+            Gizmos.color = Color.green;
+            Vector3 position = _transform.position;
+            foreach (var pattern in _robotMovementPatterns)
+            {
+                Gizmos.DrawRay(position, pattern.Direction);
+                Gizmos.DrawSphere(position, 0.4f);
+                position = position + pattern.Direction;
+            }
+        }
     }
 
 

@@ -49,6 +49,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _ControlTime: 0.632
+    - _Float: 0.25
     - _QueueControl: 0
     - _QueueOffset: 0
     - _SprinkleDensity: 3.22
