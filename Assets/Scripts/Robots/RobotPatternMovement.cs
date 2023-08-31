@@ -26,21 +26,31 @@ public class RobotPatternMovement : MonoBehaviour
     private bool _debugMovementPattern;
 
 
+
     private void Start()
     {
+        StartMovement();
+    }
+    public void StartMovement()
+    {
+        _navmeshAgent.isStopped = false;
         _cancellationTokenSource = new CancellationTokenSource();
         CancellationToken cancellationToken = _cancellationTokenSource.Token;
-
-        StartRobotPatternMovement(cancellationToken);
+        RobotMovementPatternRoutine(cancellationToken);
     }
 
-    public async void StartRobotPatternMovement(CancellationToken cancellationToken)
+    public async void RobotMovementPatternRoutine(CancellationToken cancellationToken)
     {
-    
+
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
+                if (_robotMovementPatterns.Count == 0)
+                {
+                    break;
+                }
+
                 List<MovementPattern> robotMovementPattern = _robotMovementPatterns;
 
                 float angle = 0;
@@ -59,7 +69,7 @@ public class RobotPatternMovement : MonoBehaviour
                     {
                         break;
                     }
-                                
+
                     angle += _nextAngleIncrement;
 
                     robotMovementPattern = AdjustRobotMovementPattern(robotMovementPattern, angle);
@@ -69,7 +79,8 @@ public class RobotPatternMovement : MonoBehaviour
                 if (reachable)
                 {
                     await Move(robotMovementPattern, cancellationToken);
-                } else
+                }
+                else
                 {
                     //tady to bude chtít nìjakej totálnì random point, ale nejsem si jistý, zda by to mìl èi nemìl být jiný pohyb
                 }
@@ -171,6 +182,12 @@ public class RobotPatternMovement : MonoBehaviour
         return reachable;
     }
 
+    public void OnPowerSourceRunOut()
+    {
+        _navmeshAgent.isStopped = true;
+        StopMovement();
+    }
+
     private void OnDestroy()
     {
         StopMovement();
@@ -182,7 +199,7 @@ public class RobotPatternMovement : MonoBehaviour
     }
 
     private void StopMovement()
-    {
+    {        
         if (_cancellationTokenSource is not null)
         {
             _cancellationTokenSource.Cancel();
@@ -190,7 +207,6 @@ public class RobotPatternMovement : MonoBehaviour
             _cancellationTokenSource = null;
         }
     }
-
 
     private void OnDrawGizmos()
     {

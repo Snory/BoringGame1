@@ -59,10 +59,7 @@ public class BoatMovement : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-
         string text = string.Empty;
-
-        float velocityMagnitude = _rigidBody.velocity.magnitude;
 
         if (Input.GetMouseButtonDown(0))
         {
@@ -117,5 +114,10 @@ public class BoatMovement : MonoBehaviour
             _rigidBody.velocity = Vector3.zero;
         }
 
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        _rigidBody.velocity = Vector3.zero;   
     }
 }
